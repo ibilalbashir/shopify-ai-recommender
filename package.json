@@ -1,7 +1,7 @@
 {
   "name": "shopify-ai-recommender",
   "version": "1.0.0",
-  "description": "Installable Shopify app: an AI chat widget that recommends products from a store's catalog using Claude.",
+  "description": "Installable Shopify app: an AI chat widget that recommends products from a store's catalog using Gemini.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -9,7 +9,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@google/genai": "^2.21.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",

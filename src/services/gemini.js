@@ -1,9 +1,9 @@
-const Anthropic = require("@anthropic-ai/sdk");
+const { GoogleGenAI } = require("@google/genai");
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-5-20250929";
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
-// Asks Claude to play shopping assistant over a shortlisted slice of the
+// Asks Gemini to play shopping assistant over a shortlisted slice of the
 // store's catalog, and to answer with strict JSON so the widget can render
 // product cards instead of having to parse free text.
 async function getRecommendations({ shopName, userMessage, history, products }) {
@@ -16,7 +16,7 @@ async function getRecommendations({ shopName, userMessage, history, products }) 
     )
     .join("\n");
 
-  const system = `You are a friendly, concise shopping assistant embedded as a chat widget on the Shopify store "${shopName}".
+  const systemInstruction = `You are a friendly, concise shopping assistant embedded as a chat widget on the Shopify store "${shopName}".
 A customer will describe what they want, ask a question, or just say hi. Your job is to have a brief, natural
 conversation and recommend real products from the catalog below when it makes sense to.
 
@@ -35,28 +35,28 @@ ${catalogBlock}
 Respond with ONLY a JSON object, no other text, in exactly this shape:
 {"reply": "string shown to the customer", "product_ids": [array of matching catalog ids, 0-4 items, most relevant first]}`;
 
-  const messages = [
-    ...history.map((h) => ({ role: h.role, content: h.content })),
-    { role: "user", content: userMessage },
+  // Gemini uses "model" (not "assistant") for the AI's turn.
+  const contents = [
+    ...history.map((h) => ({
+      role: h.role === "assistant" ? "model" : "user",
+      parts: [{ text: h.content }],
+    })),
+    { role: "user", parts: [{ text: userMessage }] },
   ];
 
-  const response = await anthropic.messages.create({
+  const response = await ai.models.generateContent({
     model: MODEL,
-    max_tokens: 600,
-    system,
-    messages,
+    contents,
+    config: {
+      systemInstruction,
+      maxOutputTokens: 600,
+      responseMimeType: "application/json",
+    },
   });
 
-  const text = response.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("");
-
-  return parseModelJson(text);
+  return parseModelJson(response.text || "");
 }
 
-// The model is instructed to return pure JSON, but is defensively parsed
-// in case it wraps it in prose or a code fence.
 function parseModelJson(text) {
   const match = text.match(/\{[\s\S]*\}/);
   const jsonStr = match ? match[0] : text;

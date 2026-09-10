@@ -2,7 +2,7 @@ const express = require("express");
 const { getShop } = require("../store");
 const { isValidShop } = require("../shopify");
 const { getCatalog, shortlist } = require("../services/products");
-const { getRecommendations } = require("../services/claude");
+const { getRecommendations } = require("../services/gemini");
 
 const router = express.Router();
 

@@ -2,7 +2,7 @@
 
 An installable Shopify app: a chat bubble on the storefront where a customer
 types what they want ("something for oily skin under $30", or just "hi"),
-and an AI assistant (Claude) recommends real products from that store's own
+and an AI assistant (Gemini) recommends real products from that store's own
 catalog — with images, prices, and links.
 
 It's built as a generic app: any Shopify store can install it via OAuth,
@@ -21,7 +21,7 @@ testing it on Kiyowish first, but nothing here is Kiyowish-specific.
    this app's `/api/chat` endpoint, which:
    - fetches (and caches) the shop's product catalog via the Admin API,
    - narrows it down to the ~40 most relevant products by keyword,
-   - asks Claude to pick up to 4 that fit and write a short reply,
+   - asks Gemini to pick up to 4 that fit and write a short reply,
    - sends product cards (image, title, price, link) back to the widget.
 
 ## 1. Create the Shopify app credentials
@@ -68,11 +68,12 @@ manual schema setup is needed.
 Neon (or any persistent managed Postgres you pay for / keep alive) is the
 right fit.
 
-## 3. Get an Anthropic API key
+## 3. Get a Gemini API key
 
-Create a key at [console.anthropic.com](https://console.anthropic.com) →
-**API Keys**. This is billed per request (pay-as-you-go); a typical chat
-turn costs a fraction of a cent, but keep an eye on usage if traffic grows.
+Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and
+click **Create API key**. It's free, with no credit card required, and
+comes with a generous free-tier quota — fine for testing and small-to-
+medium traffic; keep an eye on usage if traffic grows.
 
 ## 4. Deploy the server (hosting)
 
@@ -91,7 +92,7 @@ You don't have a server yet, so the simplest path is **Render**
    `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_SCOPES`, `HOST`
    (your Render URL, e.g. `https://shopify-ai-recommender.onrender.com`,
    no trailing slash), `DATABASE_URL` (your Neon connection string),
-   `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`.
+   `GEMINI_API_KEY`, `GEMINI_MODEL`.
 5. Deploy. Once live, go back to the Partner Dashboard and make sure the
    **App URL** / **redirect URL** match your real Render URL exactly.
 
@@ -141,7 +142,7 @@ src/routes/auth.js         /auth, /auth/callback (install flow)
 src/routes/chat.js         /api/chat (the widget calls this)
 src/routes/webhooks.js     Mandatory GDPR + app/uninstalled webhooks
 src/services/products.js   Fetches + caches + shortlists the catalog
-src/services/claude.js     Prompts Claude for recommendations
+src/services/gemini.js     Prompts Gemini for recommendations
 public/widget.js           The embeddable chat widget (vanilla JS)
 ```
 
@@ -149,7 +150,7 @@ public/widget.js           The embeddable chat widget (vanilla JS)
 
 - **Chat history is in-memory** and resets on server restart/redeploy.
 - **Keyword shortlisting** (not semantic search) picks which ~40 products
-  get shown to Claude for very large catalogs. Works well for small-to-
+  get shown to Gemini for very large catalogs. Works well for small-to-
   medium catalogs; for a store with thousands of SKUs, consider adding
   embeddings-based search (e.g. store product embeddings and do a vector
   similarity search instead of keyword matching).
