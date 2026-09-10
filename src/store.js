@@ -1,45 +1,41 @@
-// Very small file-based store for per-shop data (access tokens + a cached
-// product catalog). This is intentionally simple so the app has zero
-// external database to set up. It is fine for testing on a handful of
-// stores. For production with many merchants, swap this for a real
-// database (Postgres, SQLite, etc.) behind the same three functions.
+const { Pool } = require("pg");
 
-const fs = require("fs");
-const path = require("path");
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes("localhost")
+    ? false
+    : { rejectUnauthorized: false }, // required by Neon and most managed Postgres hosts
+});
 
-const DB_FILE = path.join(__dirname, "..", "data", "shops.json");
+const ready = pool.query(`
+  CREATE TABLE IF NOT EXISTS shops (
+    shop TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )
+`);
 
-function readAll() {
-  try {
-    const raw = fs.readFileSync(DB_FILE, "utf8");
-    return JSON.parse(raw);
-  } catch (err) {
-    if (err.code === "ENOENT") return {};
-    throw err;
-  }
+async function getShop(shop) {
+  await ready;
+  const { rows } = await pool.query("SELECT data FROM shops WHERE shop = $1", [shop]);
+  return rows[0] ? rows[0].data : null;
 }
 
-function writeAll(data) {
-  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+async function saveShop(shop, patch) {
+  await ready;
+  const existing = (await getShop(shop)) || {};
+  const merged = { ...existing, ...patch };
+  await pool.query(
+    `INSERT INTO shops (shop, data, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (shop) DO UPDATE SET data = $2, updated_at = now()`,
+    [shop, merged]
+  );
+  return merged;
 }
 
-function getShop(shop) {
-  const all = readAll();
-  return all[shop] || null;
-}
-
-function saveShop(shop, patch) {
-  const all = readAll();
-  all[shop] = { ...(all[shop] || {}), ...patch };
-  writeAll(all);
-  return all[shop];
-}
-
-function deleteShop(shop) {
-  const all = readAll();
-  delete all[shop];
-  writeAll(all);
+async function deleteShop(shop) {
+  await ready;
+  await pool.query("DELETE FROM shops WHERE shop = $1", [shop]);
 }
 
 module.exports = { getShop, saveShop, deleteShop };

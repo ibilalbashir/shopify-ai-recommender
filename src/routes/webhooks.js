@@ -20,9 +20,9 @@ const rawBody = express.raw({ type: "application/json" });
 
 // Fired when a merchant uninstalls the app — clean up their stored token
 // and cached catalog.
-router.post("/webhooks/app/uninstalled", rawBody, verify, (req, res) => {
+router.post("/webhooks/app/uninstalled", rawBody, verify, async (req, res) => {
   const shop = req.get("X-Shopify-Shop-Domain");
-  if (shop) deleteShop(shop);
+  if (shop) await deleteShop(shop);
   res.sendStatus(200);
 });
 
@@ -41,9 +41,9 @@ router.post("/webhooks/customers/redact", rawBody, verify, (req, res) => {
   res.sendStatus(200);
 });
 
-router.post("/webhooks/shop/redact", rawBody, verify, (req, res) => {
+router.post("/webhooks/shop/redact", rawBody, verify, async (req, res) => {
   const shop = req.jsonBody && req.jsonBody.shop_domain;
-  if (shop) deleteShop(shop);
+  if (shop) await deleteShop(shop);
   res.sendStatus(200);
 });
 

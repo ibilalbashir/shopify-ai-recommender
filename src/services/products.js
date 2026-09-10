@@ -48,7 +48,7 @@ function stripHtml(html) {
 // chat widget doesn't re-fetch the whole catalog from Shopify on every
 // message.
 async function getCatalog(shop) {
-  const record = getShop(shop);
+  const record = await getShop(shop);
   if (!record || !record.accessToken) {
     throw new Error(`No access token stored for ${shop}. Has the app been installed?`);
   }
@@ -56,7 +56,7 @@ async function getCatalog(shop) {
   if (isFresh && record.catalog) return record.catalog;
 
   const catalog = await fetchCatalog(shop, record.accessToken);
-  saveShop(shop, { catalog, catalogFetchedAt: Date.now() });
+  await saveShop(shop, { catalog, catalogFetchedAt: Date.now() });
   return catalog;
 }
 

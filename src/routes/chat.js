@@ -20,7 +20,7 @@ router.post("/api/chat", express.json(), async (req, res) => {
     return res.status(400).json({ error: "Missing message." });
   }
 
-  const shopRecord = getShop(shop);
+  const shopRecord = await getShop(shop);
   if (!shopRecord || !shopRecord.accessToken) {
     return res.status(404).json({ error: "This store hasn't installed the app." });
   }

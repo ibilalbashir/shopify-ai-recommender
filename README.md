@@ -45,13 +45,36 @@ You don't need a Shopify Partner "app store listing" to use this on your
 own stores — a manually-created app can be installed directly via the
 `/auth` link with no review process.
 
-## 2. Get an Anthropic API key
+## 2. Create a Postgres database
+
+Shop access tokens and the cached product catalog are stored in Postgres so
+they survive restarts and redeploys (a local file would get wiped every time
+the host restarts the app). The easiest free option:
+
+1. Go to [neon.com](https://neon.com) and create a free account (no credit
+   card required) and a new project — Neon's free tier doesn't expire.
+2. Copy the connection string it gives you (starts with `postgresql://...`)
+   — this becomes `DATABASE_URL`.
+
+The app creates its own `shops` table automatically on first start, so no
+manual schema setup is needed.
+
+⚠️ Two options that look convenient but **won't work** here:
+- **Render's free Postgres** — it's deleted automatically after 30 days,
+  so shop installs would silently break a month in.
+- **Render's free Key Value (Redis) instance** — it's wiped on every
+  restart, which defeats the entire point of moving off the local file.
+
+Neon (or any persistent managed Postgres you pay for / keep alive) is the
+right fit.
+
+## 3. Get an Anthropic API key
 
 Create a key at [console.anthropic.com](https://console.anthropic.com) →
 **API Keys**. This is billed per request (pay-as-you-go); a typical chat
 turn costs a fraction of a cent, but keep an eye on usage if traffic grows.
 
-## 3. Deploy the server (hosting)
+## 4. Deploy the server (hosting)
 
 You don't have a server yet, so the simplest path is **Render**
 (free tier available, no credit card for the starter tier):
@@ -67,7 +90,8 @@ You don't have a server yet, so the simplest path is **Render**
 4. Add environment variables (from `.env.example`):
    `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_SCOPES`, `HOST`
    (your Render URL, e.g. `https://shopify-ai-recommender.onrender.com`,
-   no trailing slash), `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`.
+   no trailing slash), `DATABASE_URL` (your Neon connection string),
+   `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`.
 5. Deploy. Once live, go back to the Partner Dashboard and make sure the
    **App URL** / **redirect URL** match your real Render URL exactly.
 
@@ -91,7 +115,7 @@ To test OAuth locally you need a public HTTPS URL (Shopify won't redirect
 to `localhost`) — use a tunnel like `ngrok http 3000` and set `HOST` to the
 ngrok URL while testing.
 
-## 4. Install it on a store
+## 5. Install it on a store
 
 Visit:
 
@@ -112,7 +136,7 @@ bubble will appear on the storefront within a few seconds.
 ```
 server.js                  Express app entrypoint
 src/shopify.js             OAuth + Admin API helpers (hand-rolled, no SDK)
-src/store.js               Per-shop token/catalog storage (JSON file)
+src/store.js               Per-shop token/catalog storage (Postgres)
 src/routes/auth.js         /auth, /auth/callback (install flow)
 src/routes/chat.js         /api/chat (the widget calls this)
 src/routes/webhooks.js     Mandatory GDPR + app/uninstalled webhooks
@@ -123,9 +147,6 @@ public/widget.js           The embeddable chat widget (vanilla JS)
 
 ## Known limitations / good next steps
 
-- **Storage is a JSON file** (`data/shops.json`). Fine for a handful of
-  test stores; move to a real database (Postgres/SQLite) before installing
-  on many stores or running multiple server instances.
 - **Chat history is in-memory** and resets on server restart/redeploy.
 - **Keyword shortlisting** (not semantic search) picks which ~40 products
   get shown to Claude for very large catalogs. Works well for small-to-

@@ -38,7 +38,7 @@ router.get("/auth/callback", async (req, res) => {
 
   try {
     const { access_token, scope } = await exchangeCodeForToken(shop, code);
-    saveShop(shop, { accessToken: access_token, scope, installedAt: Date.now() });
+    await saveShop(shop, { accessToken: access_token, scope, installedAt: Date.now() });
 
     // Auto-inject the chat widget on every storefront page — no theme
     // editing required by the merchant.
