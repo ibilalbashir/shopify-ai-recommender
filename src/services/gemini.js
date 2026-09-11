@@ -44,7 +44,7 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
     { role: "user", parts: [{ text: userMessage }] },
   ];
 
-  const response = await ai.models.generateContent({
+  const response = await generateWithRetry({
     model: MODEL,
     contents,
     config: {
@@ -55,6 +55,24 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
   });
 
   return parseModelJson(response.text || "");
+}
+
+// Gemini's free tier occasionally returns 503 ("model overloaded") or 429
+// ("rate limited") during high-demand periods — both are transient, not
+// real failures, so retry a couple of times with backoff before giving up.
+async function generateWithRetry(params, attempt = 1) {
+  const MAX_ATTEMPTS = 3;
+  try {
+    return await ai.models.generateContent(params);
+  } catch (err) {
+    const isRetryable = err && (err.status === 503 || err.status === 429);
+    if (isRetryable && attempt < MAX_ATTEMPTS) {
+      const delayMs = 500 * 2 ** (attempt - 1); // 500ms, then 1000ms
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return generateWithRetry(params, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 function parseModelJson(text) {
