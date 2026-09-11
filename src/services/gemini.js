@@ -49,8 +49,12 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
     contents,
     config: {
       systemInstruction,
-      maxOutputTokens: 600,
+      maxOutputTokens: 800,
       responseMimeType: "application/json",
+      // This task is simple extraction/formatting, not reasoning — disable
+      // "thinking" so its hidden tokens don't eat into maxOutputTokens and
+      // truncate the actual JSON reply before it finishes.
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
 
@@ -85,7 +89,14 @@ function parseModelJson(text) {
       productIds: Array.isArray(parsed.product_ids) ? parsed.product_ids : [],
     };
   } catch {
-    return { reply: text.trim() || "Sorry, could you rephrase that?", productIds: [] };
+    const trimmed = text.trim();
+    // If it looks like it was trying to be JSON (e.g. truncated mid-object),
+    // showing it raw to the customer is worse than a generic message.
+    const looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+    return {
+      reply: !looksLikeJson && trimmed ? trimmed : "Sorry, I didn't quite catch that — could you rephrase?",
+      productIds: [],
+    };
   }
 }
 
