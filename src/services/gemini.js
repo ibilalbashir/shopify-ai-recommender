@@ -1,7 +1,11 @@
 const { GoogleGenAI } = require("@google/genai");
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+// Deliberately pinned to a specific, established model rather than the
+// "-latest" alias: that alias tracks Google's newest model, and brand-new
+// models are launched with much stricter free-tier daily quotas (seen in
+// practice: 20 requests/day on a new flagship vs ~1,500/day on this one).
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 // Asks Gemini to play shopping assistant over a shortlisted slice of the
 // store's catalog, and to answer with strict JSON so the widget can render
