@@ -1,11 +1,20 @@
 const { GoogleGenAI } = require("@google/genai");
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-// Deliberately pinned to a specific, established model rather than the
-// "-latest" alias: that alias tracks Google's newest model, and brand-new
-// models are launched with much stricter free-tier daily quotas (seen in
-// practice: 20 requests/day on a new flagship vs ~1,500/day on this one).
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+// Google's free-tier quotas and model availability have been shifting
+// under us: a flagship model got throttled to 20 requests/day, and an
+// established model ("gemini-2.5-flash") was abruptly retired for new API
+// keys entirely (404 "no longer available to new users"). Rather than
+// pin to one model and risk another surprise outage, try a short chain of
+// models in order — GEMINI_MODEL can override with a comma-separated list.
+// Flash-Lite variants currently carry much higher free-tier daily quotas
+// (~1,500/day) than the flagship Flash models (as low as 20/day), so they
+// lead the list.
+const MODEL_CHAIN = (process.env.GEMINI_MODEL || "gemini-3.1-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 
 // Asks Gemini to play shopping assistant over a shortlisted slice of the
 // store's catalog, and to answer with strict JSON so the widget can render
@@ -48,26 +57,48 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
     { role: "user", parts: [{ text: userMessage }] },
   ];
 
-  const response = await generateWithRetry({
-    model: MODEL,
-    contents,
-    config: {
-      systemInstruction,
-      maxOutputTokens: 800,
-      responseMimeType: "application/json",
-      // This task is simple extraction/formatting, not reasoning — disable
-      // "thinking" so its hidden tokens don't eat into maxOutputTokens and
-      // truncate the actual JSON reply before it finishes.
-      thinkingConfig: { thinkingBudget: 0 },
-    },
-  });
+  const config = {
+    systemInstruction,
+    maxOutputTokens: 800,
+    responseMimeType: "application/json",
+    // This task is simple extraction/formatting, not reasoning — disable
+    // "thinking" so its hidden tokens don't eat into maxOutputTokens and
+    // truncate the actual JSON reply before it finishes.
+    thinkingConfig: { thinkingBudget: 0 },
+  };
+
+  const response = await generateWithFallback({ contents, config });
 
   return parseModelJson(response.text || "");
 }
 
+// Tries each model in MODEL_CHAIN in order. Within a model, transient
+// errors (503 overloaded, 429 rate-limited-per-minute) get a couple of
+// quick retries. A model that's out of daily quota (429 with no quick
+// recovery) or no longer available (404) is abandoned in favor of the
+// next model in the chain, so one model's bad day doesn't take the bot
+// down — it only fully fails if every model in the chain does.
+async function generateWithFallback({ contents, config }, modelIndex = 0) {
+  const model = MODEL_CHAIN[modelIndex];
+  if (!model) {
+    throw new Error("All configured Gemini models failed (quota exhausted, unavailable, or overloaded).");
+  }
+  try {
+    return await generateWithRetry({ model, contents, config });
+  } catch (err) {
+    const isRetryable404or429 = err && (err.status === 404 || err.status === 429);
+    if (isRetryable404or429 && modelIndex + 1 < MODEL_CHAIN.length) {
+      console.warn(`Gemini model "${model}" failed (${err.status}), falling back to "${MODEL_CHAIN[modelIndex + 1]}"`);
+      return generateWithFallback({ contents, config }, modelIndex + 1);
+    }
+    throw err;
+  }
+}
+
 // Gemini's free tier occasionally returns 503 ("model overloaded") or 429
 // ("rate limited") during high-demand periods — both are transient, not
-// real failures, so retry a couple of times with backoff before giving up.
+// real failures, so retry a couple of times with backoff before giving up
+// (and letting generateWithFallback try the next model in the chain).
 async function generateWithRetry(params, attempt = 1) {
   const MAX_ATTEMPTS = 3;
   try {
@@ -83,6 +114,9 @@ async function generateWithRetry(params, attempt = 1) {
   }
 }
 
+// The model is asked for pure JSON (and told to via responseMimeType), but
+// this is parsed defensively in case it still wraps it in prose or a code
+// fence.
 function parseModelJson(text) {
   const match = text.match(/\{[\s\S]*\}/);
   const jsonStr = match ? match[0] : text;
