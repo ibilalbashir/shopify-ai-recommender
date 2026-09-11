@@ -7,18 +7,24 @@ const pool = new Pool({
     : { rejectUnauthorized: false }, // required by Neon and most managed Postgres hosts
 });
 
-const ready = Promise.all([
-  pool.query(`
+// IMPORTANT: these must run one at a time, not in parallel (e.g. via
+// Promise.all) — pool.query() can hand each call a different underlying
+// connection, so firing them concurrently gives Postgres no guarantee the
+// CREATE TABLE has committed before the CREATE INDEX on that same table
+// runs, which intermittently crashes startup with a "relation does not
+// exist"-style error from a different connection's point of view.
+const ready = (async () => {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS shops (
       shop TEXT PRIMARY KEY,
       data JSONB NOT NULL DEFAULT '{}'::jsonb,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
-  `),
+  `);
   // Every chat turn (customer message + bot reply) gets a row here so you
   // can see what people actually ask the bot and how it responded, even
   // after a restart/redeploy wipes the in-memory conversation history.
-  pool.query(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id SERIAL PRIMARY KEY,
       shop TEXT NOT NULL,
@@ -28,9 +34,18 @@ const ready = Promise.all([
       product_ids JSONB,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
-  `),
-  pool.query(`CREATE INDEX IF NOT EXISTS chat_messages_shop_created_idx ON chat_messages (shop, created_at DESC)`),
-]);
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS chat_messages_shop_created_idx ON chat_messages (shop, created_at DESC)`);
+})();
+
+// Without this, a schema-setup failure at boot is an unhandled promise
+// rejection, which crashes the process with a hard-to-read raw error dump
+// instead of a clear message. Every function below still `await`s `ready`
+// itself and will correctly throw/handle it at the point of use — this
+// just stops the crash-on-boot and logs something readable.
+ready.catch((err) => {
+  console.error("Database schema setup failed:", err.message);
+});
 
 async function getShop(shop) {
   await ready;
