@@ -10,10 +10,14 @@ if (missing.length) {
   console.error("Copy .env.example to .env and fill these in before starting the server.");
   process.exit(1);
 }
+if (!process.env.ADMIN_SECRET) {
+  console.warn("ADMIN_SECRET not set — /admin/chats (view what customers ask the bot) is disabled until you set it.");
+}
 
 const authRoutes = require("./src/routes/auth");
 const chatRoutes = require("./src/routes/chat");
 const webhookRoutes = require("./src/routes/webhooks");
+const adminRoutes = require("./src/routes/admin");
 
 const app = express();
 app.use(cors()); // widget runs on the merchant's storefront domain, chat API must accept cross-origin calls
@@ -27,6 +31,7 @@ app.get("/", (_req, res) => {
 app.use(authRoutes);
 app.use(chatRoutes);
 app.use(webhookRoutes);
+app.use(adminRoutes);
 
 // Serves public/widget.js at https://your-app-host/widget.js
 app.use(express.static(path.join(__dirname, "public")));

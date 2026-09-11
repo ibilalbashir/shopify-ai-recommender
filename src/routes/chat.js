@@ -1,5 +1,5 @@
 const express = require("express");
-const { getShop } = require("../store");
+const { getShop, logMessage } = require("../store");
 const { isValidShop } = require("../shopify");
 const { getCatalog, shortlist } = require("../services/products");
 const { getRecommendations } = require("../services/gemini");
@@ -53,6 +53,12 @@ router.post("/api/chat", express.json(), async (req, res) => {
     history.push({ role: "user", content: message });
     history.push({ role: "assistant", content: reply });
     conversations.set(key, history.slice(-MAX_HISTORY_TURNS * 2));
+
+    // Fire-and-forget: persisted to Postgres so you can review what people
+    // ask (and how the bot answered) on the /admin/chats page. logMessage
+    // swallows its own errors, so this never affects the customer's reply.
+    logMessage({ shop, sessionId: sessionId || "anon", role: "user", message });
+    logMessage({ shop, sessionId: sessionId || "anon", role: "assistant", message: reply, productIds });
 
     res.json({ reply, products });
   } catch (err) {
